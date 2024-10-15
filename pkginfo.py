@@ -1,41 +1,14 @@
-### Objective
-
-
-### pkginfo.py --option file_name
-
-
-### -a print the names of the installed packages in the order in which they appear in the argument file (No Sorting)
-
-### -s  it must print the total size in kilobytes of all the installed packages
-
-### -l name he name argument has the same format as the name field in the argument file.
-
-
-# example input : pkginfo.py –l ecj argument_file
-
-## Example output
-# Package: ecj
-# Category: application
-# Description: Eclipse JDT
-# Size in kilobytes: 7544l
-#
-
-### -v print Name, Surname, Student ID, date of completion in my choice of format
-
-#NOTE: should handle error respectively
-
 import os
 from os.path import isfile
 import sys
 import re
-
 
 class Package:
 
     name: str
     category: str
     description: str
-    size: str
+    size: int
 
     def __init__(self, name , cat, des, size):
         self.name = name
@@ -54,27 +27,24 @@ Size in kilobytes: {self.size}
     @staticmethod
     def parser(package_string: str):
         parser = package_string.split(',')
-        return Package(parser[0], parser[1], parser[2], parser[3])
+        return Package(parser[1], parser[0], parser[2], int(parser[3]))
 
+class ArgumentCallBackException(Exception):
+    pass
 
 class NotFoundPackage(Exception):
     pass
 
 class UnsupportArgument(Exception):
     pass
-    # def __init__(self, message, error_code):
-    #     super().__init__(message)
-    #     self.error_code = error_code
-    #
-    # def __str__(self):
-    #     return f"{self.message} (Error Code: {self.error_code})"
-
 
 def exception_handler(exctype, value, traceback):
     if exctype == FileNotFoundError:
         print("File Not Found ! please provided sufficient file name")
     elif exctype == UnsupportArgument:
         print("Unsupported Argument")
+    elif exctype == ArgumentCallBackException:
+        print("Insufficient call back, please provide a function for each argument")
     else:
         sys.__excepthook__(exctype, value, traceback)
 
@@ -84,26 +54,74 @@ def validate_file(file_name):
     if not isfile(file_name):
         raise FileNotFoundError("file not found")
 
-def argument_builder(sys_args):
-    args = sys_args
-    args.pop(0)
+def argument_builder(sys_args, arguments):
+    sys_args.pop(0)
 
-    if len(args) == 2:
-        validate_file(args[1])
-    if len(args) == 3:
-        validate_file(args[2])
+    result = {}
 
-    return  args
+    for arg in arguments:
+
+        if arg["option"] != sys_args[0]:
+            continue
+
+        result["option_name"] = arg["option_name"]
+
+        arg_len = DEFAULT_ARG_LEN
+
+        if arg["option_argument"]:
+            arg_len += 1
+
+        if(len(sys_args) < arg_len):
+            print("Missing an argument")
+            exit(1)
+
+        if(len(sys_args) > arg_len):
+            raise UnsupportArgument()
+
+        result["option_argument"] = sys_args[1]
+
+        if arg["file"]:
+            file = sys_args[-1]
+            validate_file(file)
+            result["file"] = file
+
+    if not result:
+        raise UnsupportArgument()
+
+    return result
 
 def application_configuration():
     sys.excepthook = exception_handler
 
-
 def list_all(file_name):
-    pass
+    result = ""
+
+    if(os.path.getsize(file_name) == 0):
+        print("No packages installed")
+        exit(1)
+
+    with open(file_name, "r") as file:
+        for line in file:
+            pkg = Package.parser(line)
+            result += pkg.name + "\n"
+
+    print("Installed packages:")
+    print(result)
+
 
 def calculate_total_pkg_size(file_name):
-    pass
+    total_pkg_size = 0
+
+    if(os.path.getsize(file_name) == 0):
+        print(f"Total size in kilobytes: {total_pkg_size}")
+        exit(0)
+
+    with open(file_name, "r") as file:
+        for line in file:
+            pkg = Package.parser(line)
+            total_pkg_size += pkg.size
+
+    print(f"Total size in kilobytes: {total_pkg_size}")
 
 def verbose():
     print(r"""
@@ -124,52 +142,53 @@ Please use this option with fullscreen thank you
                                                     
 
 DINH NHAT TAI NGUYEN - 25410794
-DATE OF COMPLETION: 
+DATE OF COMPLETION: 16/Oct/2024
 """)
 
-def list_pkg(pkg_name, file_name):
-    
-    if pkg_name == "not_there":
-        print("No installed package with this name")
-        exit(1)
+def list_pkg_with_name(pkg_name, file_name):
 
     #TODO: this need to be a different error 
     if os.path.getsize(file_name) == 0:
-        # print("No installed package with this name")
-        # exit(1)
-        pass
-   
-    file = open(file_name, "r")
-    pattern = f"^/b{pkg_name}/b,"
+        print("No installed package with this name")
+        exit(1)
 
-    matched_pkg = re.match(pattern, file.read())
+    pattern = re.compile(f"^[a-z_.]+,.*{pkg_name}.*,[-/a-zA-Z0-9.+_ ]+,[0-9]+$", re.IGNORECASE)
+    print(pattern)
+    matched_pkg = None
+
+    with open(file_name, "r") as file:
+        for item in file:
+            matched_pkg = pattern.match(item)
 
     if not matched_pkg: 
         print("No installed package with this name")
         exit(1)
-     
-    return matched_pkg
 
+    print(Package.parser(matched_pkg.string))
 
 if __name__ == "__main__":
 
     application_configuration()
 
     #TODO: Extend argument_builder to deal with syntax error scenario
-    args = argument_builder(sys.argv)
+    # args = argument_builder(sys.argv)
+    DEFAULT_ARG_LEN = 2
 
-    match args:
-        case ["-a", file]:
-            print("Installed packages:")
-        case ["-s", file]:
-            print("Total size in kilobytes:")
-        case ["-v", file]:
-            verbose()
-        case ["-l", pkg_name, file]:
-            print("pkg_name")
-        case ["parser"]:
-            result = Package.parser("system,SUNWdoc,Documentation Tools,1251") 
-            print(result.__str__())
-        case _:
-            raise UnsupportArgument()
+    arguments = [{"option": "-l", "option_name":"list-pkg-with-name","option_argument": True, "file": True},
+                 {"option": "-a", "option_name":"list-all","option_argument": False, "file": True},
+                 {"option": "-v", "option_name":"verbose","option_argument": False, "file": True},
+                 {"option": "-s", "option_name":"size","option_argument": False, "file": True}]
+
+    arg = argument_builder(sys.argv, arguments)
+
+    if arg["option_name"] == "list-pkg-with-name":
+        list_pkg_with_name(arg["option_argument"], arg["file"])
+    elif arg["option_name"] == "list-all":
+        list_all(arg["file"])
+    elif arg["option_name"] == "verbose":
+        verbose()
+    elif arg["option_name"] == "size":
+        calculate_total_pkg_size(arg["file"])
+    else:
+        raise UnsupportArgument()
 
